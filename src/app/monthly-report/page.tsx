@@ -4,12 +4,12 @@
 import { useState, useMemo } from 'react';
 import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
 import { collection, query, where } from 'firebase/firestore';
-import { startOfMonth, endOfMonth, getYear, getMonth, differenceInDays } from 'date-fns';
+import { startOfMonth, endOfMonth, getYear, getMonth, differenceInDays, format } from 'date-fns';
 import type { Expense } from '@/lib/types';
 import { Header } from '@/components/dashboard/Header';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
-import { Home } from 'lucide-react';
+import { Home, Download } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { MonthPicker } from '@/components/expenses/MonthPicker';
 import { TotalExpensesCard } from '@/components/dashboard/TotalExpensesCard';
@@ -116,6 +116,44 @@ export default function MonthlyReportPage() {
       averageDailySpend,
     };
   }, [expenses, selectedDate]);
+  
+  const handleExport = () => {
+    if (!expenses || expenses.length === 0) {
+      toast({
+        variant: 'destructive',
+        title: 'No Data to Export',
+        description: 'There are no expenses for the selected month.',
+      });
+      return;
+    }
+
+    const headers = ['Date', 'Category', 'Description', 'Amount'];
+    const csvRows = [headers.join(',')];
+
+    for (const expense of expenses) {
+      const date = format(new Date(expense.date), 'yyyy-MM-dd');
+      // Escape commas in description by wrapping in double quotes
+      const description = `"${expense.description.replace(/"/g, '""')}"`;
+      const values = [date, expense.category, description, expense.amount.toFixed(2)];
+      csvRows.push(values.join(','));
+    }
+
+    const csvString = csvRows.join('\n');
+    const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+    
+    const link = document.createElement('a');
+    if (link.download !== undefined) {
+      const url = URL.createObjectURL(blob);
+      link.setAttribute('href', url);
+      link.setAttribute('download', `Expense-Report-${monthName}-${year}.csv`);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    }
+  };
+
 
   return (
     <div className="flex flex-col min-h-screen bg-gradient-to-b from-background to-secondary/50">
@@ -129,12 +167,18 @@ export default function MonthlyReportPage() {
                 Review your spending habits for any given month.
               </p>
             </div>
-            <Button asChild variant="outline">
-              <Link href="/">
-                <Home className="mr-2 h-4 w-4" />
-                Back to Dashboard
-              </Link>
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button onClick={handleExport} variant="secondary">
+                <Download className="mr-2 h-4 w-4" />
+                Export to CSV
+              </Button>
+              <Button asChild variant="outline">
+                <Link href="/">
+                  <Home className="mr-2 h-4 w-4" />
+                  Back to Dashboard
+                </Link>
+              </Button>
+            </div>
           </div>
 
           <Card className="bg-card/80 backdrop-blur-sm">
