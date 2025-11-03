@@ -1,0 +1,128 @@
+/**
+ * @fileoverview Firestore Security Rules for Expense Tracker App
+ *
+ * Core Philosophy:
+ * This ruleset enforces a strict user-ownership model. Each user has exclusive
+ * access to their profile data, expenses, and owed amounts.
+ *
+ * Data Structure:
+ * - /users/{userId}: Stores user profile information.
+ * - /users/{userId}/expenses/{expenseId}: Stores expense entries for each user.
+ * - /users/{userId}/owedAmounts/{owedAmountId}: Stores amounts owed by each user.
+ *
+ * Key Security Decisions:
+ * - Users can only create, read, update, and delete their own data.
+ * - No listing of all users is allowed.
+ * - Data consistency is enforced between the path and the document's userId field.
+ *
+ * Denormalization for Authorization:
+ * The `userId` field is included within the `Expense` and `OwedAmount` documents.
+ * This allows rules to validate ownership without additional `get()` calls.
+ */
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    /**
+     * @description Secures the user profiles collection. Only the authenticated user can manage their own profile.
+     * @path /users/{userId}
+     * @allow (create) - Authenticated user can create their own profile if the userId matches their auth.uid.
+     * @allow (get, update, delete) - Authenticated user can read, update, and delete their own profile if the userId matches their auth.uid.
+     * @deny (create, get, update, delete) - Any operation where the userId does not match the authenticated user's uid.
+     * @principle Enforces strict user ownership and prevents unauthorized access to user profiles.
+     */
+    match /users/{userId} {
+      function isSignedIn() {
+        return request.auth != null;
+      }
+      function isOwner(userId) {
+        return isSignedIn() && request.auth.uid == userId;
+      }
+      function isExistingOwner(userId) {
+          return isOwner(userId) && resource != null;
+      }
+
+      allow create: if isOwner(userId);
+      allow get: if isOwner(userId);
+      allow list: if false;
+      allow update: if isExistingOwner(userId);
+      allow delete: if isExistingOwner(userId);
+    }
+
+    /**
+     * @description Secures the expenses subcollection for each user. Only the authenticated user can manage their own expenses.
+     * @path /users/{userId}/expenses/{expenseId}
+     * @allow (create) - Authenticated user can create expenses under their userId.
+     * @allow (get, list, update, delete) - Authenticated user can read, list, update, and delete expenses under their userId.
+     * @deny (create, get, list, update, delete) - Any operation where the userId does not match the authenticated user's uid.
+     * @principle Enforces strict user ownership and prevents unauthorized access to expenses.
+     */
+    match /users/{userId}/expenses/{expenseId} {
+      function isSignedIn() {
+        return request.auth != null;
+      }
+      function isOwner(userId) {
+        return isSignedIn() && request.auth.uid == userId;
+      }
+      function isExistingOwner(userId) {
+          return isOwner(userId) && resource != null;
+      }
+      allow create: if isOwner(userId) && request.resource.data.userId == userId;
+      allow get: if isOwner(userId);
+      allow list: if isOwner(userId);
+      allow update: if isExistingOwner(userId) && request.resource.data.userId == resource.data.userId;
+      allow delete: if isExistingOwner(userId);
+    }
+
+    /**
+     * @description Secures the owed amounts subcollection for each user. Only the authenticated user can manage their own owed amounts.
+     * @path /users/{userId}/owedAmounts/{owedAmountId}
+     * @allow (create) - Authenticated user can create owed amounts under their userId.
+     * @allow (get, list, update, delete) - Authenticated user can read, list, update, and delete owed amounts under their userId.
+     * @deny (create, get, list, update, delete) - Any operation where the userId does not match the authenticated user's uid.
+     * @principle Enforces strict user ownership and prevents unauthorized access to owed amounts.
+     */
+    match /users/{userId}/owedAmounts/{owedAmountId} {
+      function isSignedIn() {
+        return request.auth != null;
+      }
+      function isOwner(userId) {
+        return isSignedIn() && request.auth.uid == userId;
+      }
+      function isExistingOwner(userId) {
+          return isOwner(userId) && resource != null;
+      }
+      allow create: if isOwner(userId) && request.resource.data.userId == userId;
+      allow get: if isOwner(userId);
+      allow list: if isOwner(userId);
+      allow update: if isExistingOwner(userId) && request.resource.data.userId == resource.data.userId;
+      allow delete: if isExistingOwner(userId);
+    }
+    
+    /**
+     * @description Secures the recurring expenses subcollection.
+     * @path /users/{userId}/recurringExpenses/{recurringExpenseId}
+     * @allow (create, get, list, update, delete) - Only the user can manage their own recurring expenses.
+     * @principle Enforces strict user ownership for recurring expenses.
+     */
+    match /users/{userId}/recurringExpenses/{recurringExpenseId} {
+        function isSignedIn() {
+            return request.auth != null;
+        }
+        function isOwner(userId) {
+            return isSignedIn() && request.auth.uid == userId;
+        }
+        function isExistingOwner(userId) {
+            return isOwner(userId) && resource != null;
+        }
+
+        allow create: if isOwner(userId) && request.resource.data.userId == userId;
+        allow get: if isOwner(userId);
+        allow list: if isOwner(userId);
+        allow update: if isExistingOwner(userId) && request.resource.data.userId == resource.data.userId;
+        allow delete: if isExistingOwner(userId);
+    }
+  }
+}
+
+    
