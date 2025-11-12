@@ -1,3 +1,4 @@
+
 "use client";
 
 import type { RecurringExpense } from "@/lib/types";
@@ -32,8 +33,6 @@ export function RecurringExpenseList({ recurringExpenses, onDelete }: RecurringE
         <TableHeader>
           <TableRow>
             <TableHead>Description</TableHead>
-            <TableHead>Category</TableHead>
-            <TableHead>Frequency</TableHead>
             <TableHead>Next Due</TableHead>
             <TableHead className="text-right">Amount</TableHead>
             <TableHead className="w-[50px]"></TableHead>
@@ -42,13 +41,13 @@ export function RecurringExpenseList({ recurringExpenses, onDelete }: RecurringE
         <TableBody>
           {recurringExpenses.map((expense) => (
             <TableRow key={expense.id}>
-              <TableCell className="font-medium max-w-[200px] truncate">{expense.description}</TableCell>
-              <TableCell>
-                <Badge variant='secondary'>
-                  {expense.category}
-                </Badge>
+              <TableCell className="font-medium max-w-[150px] sm:max-w-xs truncate whitespace-normal">
+                <div>{expense.description}</div>
+                <div className="flex items-center gap-2 mt-1">
+                    <Badge variant='secondary'>{expense.category}</Badge>
+                    <span className="text-xs capitalize text-muted-foreground">{expense.frequency}</span>
+                </div>
               </TableCell>
-              <TableCell className="capitalize">{expense.frequency}</TableCell>
               <TableCell>{format(new Date(expense.nextDueDate), 'dd/MM/yyyy')}</TableCell>
               <TableCell className="text-right font-medium">₹{expense.amount.toFixed(2)}</TableCell>
               <TableCell>
@@ -68,5 +67,3 @@ export function RecurringExpenseList({ recurringExpenses, onDelete }: RecurringE
     </div>
   );
 }
-
-    

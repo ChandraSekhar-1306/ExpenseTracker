@@ -57,13 +57,13 @@ export function ExpenseList({ expenses, onDelete, onRowClick }: ExpenseListProps
                 expense.category === 'Repayment' && 'cursor-pointer hover:bg-muted/50'
               )}
             >
-              <TableCell>{format(new Date(expense.date), 'dd/MM/yyyy')}</TableCell>
+              <TableCell>{format(new Date(expense.date), 'dd/MM/yy')}</TableCell>
               <TableCell>
                 <Badge variant={expense.category === 'Repayment' ? 'default' : 'secondary'}>
                   {expense.category}
                 </Badge>
               </TableCell>
-              <TableCell className="max-w-[200px] truncate">{expense.description}</TableCell>
+              <TableCell className="max-w-[150px] sm:max-w-xs truncate whitespace-normal">{expense.description}</TableCell>
               <TableCell className="text-right font-medium">₹{expense.amount.toFixed(2)}</TableCell>
               <TableCell>
                 <Button

@@ -9,6 +9,7 @@
  * - /users/{userId}: Stores user profile information.
  * - /users/{userId}/expenses/{expenseId}: Stores expense entries for each user.
  * - /users/{userId}/owedAmounts/{owedAmountId}: Stores amounts owed by each user.
+ * - /users/{userId}/owedToMe/{owedToMeId}: Stores amounts owed to the user.
  *
  * Key Security Decisions:
  * - Users can only create, read, update, and delete their own data.
@@ -122,7 +123,53 @@ service cloud.firestore {
         allow update: if isExistingOwner(userId) && request.resource.data.userId == resource.data.userId;
         allow delete: if isExistingOwner(userId);
     }
+    
+    /**
+     * @description Secures the budgets subcollection.
+     * @path /users/{userId}/budgets/{budgetId}
+     * @allow (create, get, list, update, delete) - Only the user can manage their own budgets.
+     * @principle Enforces strict user ownership for budgets.
+     */
+    match /users/{userId}/budgets/{budgetId} {
+        function isSignedIn() {
+            return request.auth != null;
+        }
+        function isOwner(userId) {
+            return isSignedIn() && request.auth.uid == userId;
+        }
+        function isExistingOwner(userId) {
+            return isOwner(userId) && resource != null;
+        }
+
+        allow create: if isOwner(userId) && request.resource.data.userId == userId;
+        allow get: if isOwner(userId);
+        allow list: if isOwner(userId);
+        allow update: if isExistingOwner(userId) && request.resource.data.userId == resource.data.userId;
+        allow delete: if isExistingOwner(userId);
+    }
+
+    /**
+     * @description Secures the 'owed to me' subcollection.
+     * @path /users/{userId}/owedToMe/{owedToMeId}
+     * @allow (create, get, list, update, delete) - Only the user can manage amounts owed to them.
+     * @principle Enforces strict user ownership for amounts owed to the user.
+     */
+    match /users/{userId}/owedToMe/{owedToMeId} {
+        function isSignedIn() {
+            return request.auth != null;
+        }
+        function isOwner(userId) {
+            return isSignedIn() && request.auth.uid == userId;
+        }
+        function isExistingOwner(userId) {
+            return isOwner(userId) && resource != null;
+        }
+
+        allow create: if isOwner(userId) && request.resource.data.userId == userId;
+        allow get: if isOwner(userId);
+        allow list: if isOwner(userId);
+        allow update: if isExistingOwner(userId) && request.resource.data.userId == resource.data.userId;
+        allow delete: if isExistingOwner(userId);
+    }
   }
 }
-
-    

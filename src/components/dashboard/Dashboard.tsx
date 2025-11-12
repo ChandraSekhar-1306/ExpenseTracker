@@ -1,7 +1,7 @@
 
 "use client";
 
-import type { Expense, OwedAmount, RecurringExpense } from "@/lib/types";
+import type { Expense, OwedAmount, RecurringExpense, Budget, OwedToMe } from "@/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { TotalExpensesCard } from "./TotalExpensesCard";
 import { OwedSummaryCard } from "./OwedSummaryCard";
@@ -21,10 +21,18 @@ import { Loader, List } from "lucide-react";
 import Link from "next/link";
 import { Button } from "../ui/button";
 import { ExpenseFilters, type Filters } from "@/components/expenses/ExpenseFilters";
-import { startOfMonth, endOfMonth, addDays, addWeeks, addMonths, addYears } from "date-fns";
+import { startOfMonth, endOfMonth, addDays, addWeeks, addMonths, addYears, format } from "date-fns";
 import { RepaymentDetailsDialog } from "./RepaymentDetailsDialog";
 import { AddRecurringExpenseForm } from "./AddRecurringExpenseForm";
 import { RecurringExpenseList } from "./RecurringExpenseList";
+import { AddBudgetForm } from "./AddBudgetForm";
+import { BudgetList } from "./BudgetList";
+import { BudgetSummaryCard } from "./BudgetSummaryCard";
+import { OwedToMeSummaryCard } from "./OwedToMeSummaryCard";
+import { AddOwedToMeForm } from "./AddOwedToMeForm";
+import { OwedToMeList } from "./OwedToMeList";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 
 export function Dashboard() {
   const { toast } = useToast();
@@ -32,6 +40,7 @@ export function Dashboard() {
   const auth = useAuth();
   const firestore = useFirestore();
   const [activeTab, setActiveTab] = useState('expenses');
+  const isMobile = useIsMobile();
 
   const [selectedRepayment, setSelectedRepayment] = useState<Expense | null>(null);
   const [isRepaymentDialogOpen, setIsRepaymentDialogOpen] = useState(false);
@@ -167,6 +176,21 @@ export function Dashboard() {
   , [firestore, user]);
   const { data: recurringExpenses, isLoading: recurringExpensesLoading } = useCollection<RecurringExpense>(recurringExpensesQuery);
 
+  const budgetsQuery = useMemoFirebase(() => {
+    if (!user) return null;
+    const currentMonth = format(new Date(), 'yyyy-MM');
+    return query(
+      collection(firestore, 'users', user.uid, 'budgets'),
+      where('month', '==', currentMonth)
+    );
+  }, [firestore, user]);
+  const { data: budgets, isLoading: budgetsLoading } = useCollection<Budget>(budgetsQuery);
+
+  const owedToMeQuery = useMemoFirebase(() =>
+    user ? query(collection(firestore, "users", user.uid, "owedToMe")) : null
+  , [firestore, user]);
+  const { data: owedToMe, isLoading: owedToMeLoading } = useCollection<OwedToMe>(owedToMeQuery);
+
   useEffect(() => {
     if (recurringExpenses) {
       processRecurringExpenses(recurringExpenses);
@@ -267,6 +291,57 @@ export function Dashboard() {
     });
   };
 
+  const handleAddBudget = (budget: Omit<Budget, 'id' | 'userId'>) => {
+    if (!user) return;
+    const newBudget = { ...budget, userId: user.uid };
+    addDocumentNonBlocking(collection(firestore, 'users', user.uid, 'budgets'), newBudget);
+    toast({
+      title: 'Budget Set!',
+      description: `Your new budget for ${budget.category || 'Overall'} has been set to ₹${budget.amount}.`,
+    });
+  };
+
+  const handleDeleteBudget = (id: string) => {
+    if (!user) return;
+    deleteDocumentNonBlocking(doc(firestore, 'users', user.uid, 'budgets', id));
+    toast({
+      title: 'Budget Removed',
+      variant: 'destructive',
+    });
+  };
+
+  const handleAddOwedToMe = (item: Omit<OwedToMe, "id" | "date" | "received" | "userId">) => {
+    if (!user) return;
+    const newItem: Omit<OwedToMe, "id"> = {
+      ...item,
+      userId: user.uid,
+      received: false,
+      date: new Date().toISOString(),
+    };
+    addDocumentNonBlocking(collection(firestore, "users", user.uid, "owedToMe"), newItem);
+    toast({
+      title: "Amount Owed to You Added",
+      description: `${item.person} owes you ₹${item.amount.toFixed(2)}`,
+    });
+  };
+
+  const handleDeleteOwedToMe = (id: string) => {
+    if(!user) return;
+    deleteDocumentNonBlocking(doc(firestore, "users", user.uid, "owedToMe", id));
+    toast({
+      title: "Owed Amount Removed",
+      variant: "destructive",
+    });
+  };
+
+  const handleMarkAsReceived = (id: string) => {
+    if(!user) return;
+    deleteDocumentNonBlocking(doc(firestore, "users", user.uid, "owedToMe", id));
+    toast({
+      title: "Marked as Received",
+      description: `The amount has been cleared.`,
+    });
+  };
 
   const handleExpenseClick = (expense: Expense) => {
     if (expense.category === 'Repayment') {
@@ -275,7 +350,7 @@ export function Dashboard() {
     }
   };
   
-  const isLoading = isUserLoading || expensesLoading || owedAmountsLoading || recurringExpensesLoading;
+  const isLoading = isUserLoading || expensesLoading || owedAmountsLoading || recurringExpensesLoading || budgetsLoading || owedToMeLoading;
 
   if (isLoading && !expensesFromQuery) { // Show loader only on initial load
     return (
@@ -285,114 +360,197 @@ export function Dashboard() {
     );
   }
 
+  const overallBudget = budgets?.find(b => b.category === null);
+
+  const TabSelector = () => {
+    if (isMobile) {
+      return (
+        <div className="px-1">
+            <Select value={activeTab} onValueChange={setActiveTab}>
+                <SelectTrigger className="bg-primary text-primary-foreground focus:ring-primary">
+                    <SelectValue placeholder="Select a view" />
+                </SelectTrigger>
+                <SelectContent>
+                    <SelectItem value="expenses">Expenses</SelectItem>
+                    <SelectItem value="owed">Owed by You</SelectItem>
+                    <SelectItem value="owedToMe">Owed to You</SelectItem>
+                    <SelectItem value="recurring">Recurring</SelectItem>
+                    <SelectItem value="budgets">Budgets</SelectItem>
+                </SelectContent>
+            </Select>
+        </div>
+      );
+    }
+    return (
+        <TabsList className="grid w-full grid-cols-5">
+            <TabsTrigger value="expenses">Expenses</TabsTrigger>
+            <TabsTrigger value="owed">Owed by You</TabsTrigger>
+            <TabsTrigger value="owedToMe">Owed to You</TabsTrigger>
+            <TabsTrigger value="recurring">Recurring</TabsTrigger>
+            <TabsTrigger value="budgets">Budgets</TabsTrigger>
+        </TabsList>
+    );
+  }
+
   return (
     <div className="space-y-6">
-      <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
         <TotalExpensesCard expenses={expensesForCurrentMonth || []} />
         <OwedSummaryCard owedAmounts={owedAmounts || []} />
-        <CategoryChartCard expenses={expensesForCurrentMonth || []} />
+        <OwedToMeSummaryCard owedToMeAmounts={owedToMe || []} />
+        <BudgetSummaryCard budget={overallBudget} expenses={expensesForCurrentMonth || []} />
       </div>
-
-      <Tabs defaultValue="expenses" className="space-y-4" value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="w-full grid grid-cols-3">
-          <TabsTrigger value="expenses">Monthly Expenses</TabsTrigger>
-          <TabsTrigger value="owed">Owed Amounts</TabsTrigger>
-          <TabsTrigger value="recurring">Recurring</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="expenses" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Log a New Expense</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <AddExpenseForm onSubmit={handleAddExpense} />
-            </CardContent>
-          </Card>
-          <Card>
-             <CardHeader>
-              <CardTitle>Filters</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ExpenseFilters
-                onFilterChange={setDashboardFilters}
-                isLoading={isLoading}
-              />
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle>Monthly Expenses</CardTitle>
-              <Button asChild variant="outline" size="sm">
-                <Link href="/all-expenses">
-                  <List className="mr-2 h-4 w-4" />
-                  View All
-                </Link>
-              </Button>
-            </CardHeader>
-            <CardContent>
-               {expensesLoading ? (
-                 <div className="flex items-center justify-center h-40">
-                   <List className="h-8 w-8 animate-spin text-primary" />
-                 </div>
-              ) : (
-                <ExpenseList expenses={filteredExpenses || []} onDelete={handleDeleteExpense} onRowClick={handleExpenseClick} />
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="owed" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Track a New Owed Amount</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <AddOwedForm onSubmit={handleAddOwed} />
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle>Currently Owed</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <OwedList
-                owedAmounts={owedAmounts || []}
-                onDelete={handleDeleteOwed}
-                onMarkAsPaid={handleMarkAsPaid}
-              />
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="recurring" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Add a Recurring Expense</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <AddRecurringExpenseForm onSubmit={handleAddRecurringExpense} />
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle>Active Recurring Expenses</CardTitle>
-            </CardHeader>
-            <CardContent>
-               {recurringExpensesLoading ? (
-                 <div className="flex items-center justify-center h-40">
-                   <List className="h-8 w-8 animate-spin text-primary" />
-                 </div>
-              ) : (
-                <RecurringExpenseList 
-                  recurringExpenses={recurringExpenses || []} 
-                  onDelete={handleDeleteRecurringExpense} 
-                />
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
+      <div className="grid gap-6 lg:grid-cols-5">
+        <div className="lg:col-span-3 space-y-6">
+             <Tabs defaultValue="expenses" className="space-y-4" value={activeTab} onValueChange={setActiveTab}>
+                <TabSelector />
+                 <TabsContent value="expenses" className="space-y-4">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Log a New Expense</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <AddExpenseForm onSubmit={handleAddExpense} />
+                    </CardContent>
+                  </Card>
+                   <Card>
+                    <CardHeader className="flex flex-row items-center justify-between">
+                      <CardTitle>Filters</CardTitle>
+                       <Link href="/all-expenses">
+                          <Button variant="outline" size="sm">
+                            <List className="mr-2 h-4 w-4" />
+                            View All
+                          </Button>
+                      </Link>
+                    </CardHeader>
+                    <CardContent>
+                      <ExpenseFilters
+                        onFilterChange={setDashboardFilters}
+                        isLoading={isLoading}
+                      />
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Filtered Expenses</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                       {expensesLoading ? (
+                         <div className="flex items-center justify-center h-40">
+                           <List className="h-8 w-8 animate-spin text-primary" />
+                         </div>
+                      ) : (
+                        <ExpenseList expenses={filteredExpenses || []} onDelete={handleDeleteExpense} onRowClick={handleExpenseClick} />
+                      )}
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+                 <TabsContent value="owed" className="space-y-4">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Track an Amount You Owe</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <AddOwedForm onSubmit={handleAddOwed} />
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Currently Owed to Others</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <OwedList
+                        owedAmounts={owedAmounts || []}
+                        onDelete={handleDeleteOwed}
+                        onMarkAsPaid={handleMarkAsPaid}
+                      />
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+                <TabsContent value="owedToMe" className="space-y-4">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Track an Amount Owed to You</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <AddOwedToMeForm onSubmit={handleAddOwedToMe} />
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Currently Owed to You</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <OwedToMeList
+                        owedToMeAmounts={owedToMe || []}
+                        onDelete={handleDeleteOwedToMe}
+                        onMarkAsReceived={handleMarkAsReceived}
+                      />
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+                 <TabsContent value="recurring" className="space-y-4">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Add a Recurring Expense</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <AddRecurringExpenseForm onSubmit={handleAddRecurringExpense} />
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Active Recurring Expenses</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                       {recurringExpensesLoading ? (
+                         <div className="flex items-center justify-center h-40">
+                           <List className="h-8 w-8 animate-spin text-primary" />
+                         </div>
+                      ) : (
+                        <RecurringExpenseList 
+                          recurringExpenses={recurringExpenses || []} 
+                          onDelete={handleDeleteRecurringExpense} 
+                        />
+                      )}
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+                <TabsContent value="budgets" className="space-y-4">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Set a New Budget</CardTitle>
+                      <p className="text-sm text-muted-foreground pt-1">Set budgets for the current month: {format(new Date(), 'MMMM yyyy')}</p>
+                    </CardHeader>
+                    <CardContent>
+                      <AddBudgetForm onSubmit={handleAddBudget} existingBudgets={budgets || []} />
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>This Month's Budgets</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                       {budgetsLoading || expensesLoading ? (
+                         <div className="flex items-center justify-center h-40">
+                           <List className="h-8 w-8 animate-spin text-primary" />
+                         </div>
+                      ) : (
+                        <BudgetList
+                          budgets={budgets || []}
+                          expenses={expensesForCurrentMonth || []}
+                          onDelete={handleDeleteBudget}
+                        />
+                      )}
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+              </Tabs>
+        </div>
+        <div className="lg:col-span-2">
+            <CategoryChartCard expenses={expensesForCurrentMonth || []} />
+        </div>
+      </div>
        <RepaymentDetailsDialog
         expense={selectedRepayment}
         open={isRepaymentDialogOpen}

@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useForm } from "react-hook-form";
@@ -13,33 +14,46 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { PlusCircle } from "lucide-react";
+import { format } from "date-fns";
+import type { Budget } from "@/lib/types";
 
 const formSchema = z.object({
-  category: z.string().min(1, "Category is required"),
-  amount: z.coerce.number().positive("Amount must be positive"),
-  description: z.string().min(1, "Description is required"),
+  category: z.string().optional(),
+  amount: z.coerce.number().positive("Budget amount must be positive"),
 });
 
 type FormValues = z.infer<typeof formSchema>;
 
-interface AddExpenseFormProps {
-  onSubmit: (data: FormValues) => void;
+interface AddBudgetFormProps {
+  onSubmit: (data: Omit<Budget, "id" | "userId">) => void;
+  existingBudgets: Budget[];
 }
 
-export function AddExpenseForm({ onSubmit }: AddExpenseFormProps) {
+export function AddBudgetForm({ onSubmit, existingBudgets }: AddBudgetFormProps) {
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       category: "",
       amount: 0,
-      description: "",
     },
   });
+  
+  const getCategoryPlaceholder = () => {
+    const hasOverallBudget = existingBudgets.some(b => b.category === null);
+    if (hasOverallBudget) {
+      return "e.g., Groceries (Overall budget set)";
+    }
+    return "e.g., Groceries (or leave blank for Overall)";
+  };
 
   const handleSubmit = (data: FormValues) => {
-    onSubmit(data);
+    const currentMonth = format(new Date(), 'yyyy-MM');
+    onSubmit({
+      category: data.category === "" ? null : data.category,
+      amount: data.amount,
+      month: currentMonth,
+    });
     form.reset();
   };
 
@@ -52,9 +66,9 @@ export function AddExpenseForm({ onSubmit }: AddExpenseFormProps) {
             name="category"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Category</FormLabel>
+                <FormLabel>Category (Optional)</FormLabel>
                 <FormControl>
-                  <Input placeholder="e.g., Groceries" {...field} />
+                  <Input placeholder={getCategoryPlaceholder()} {...field} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -65,11 +79,11 @@ export function AddExpenseForm({ onSubmit }: AddExpenseFormProps) {
             name="amount"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Amount</FormLabel>
+                <FormLabel>Budget Amount</FormLabel>
                 <FormControl>
                   <div className="relative">
                     <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-muted-foreground">₹</span>
-                    <Input type="number" step="0.01" placeholder="e.g., 50.75" className="pl-7" {...field} />
+                    <Input type="number" step="0.01" placeholder="e.g., 500.00" className="pl-7" {...field} />
                   </div>
                 </FormControl>
                 <FormMessage />
@@ -77,21 +91,9 @@ export function AddExpenseForm({ onSubmit }: AddExpenseFormProps) {
             )}
           />
         </div>
-        <FormField
-          control={form.control}
-          name="description"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Description</FormLabel>
-              <FormControl>
-                <Textarea placeholder="e.g., Weekly shopping at Trader Joe's" {...field} />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-        <Button type="submit" className="w-full sm:w-auto bg-primary text-primary-foreground">
-          <PlusCircle className="mr-2 h-4 w-4" /> Add Expense
+        
+        <Button type="submit" className="w-full sm:w-auto">
+          <PlusCircle className="mr-2 h-4 w-4" /> Set Budget
         </Button>
       </form>
     </Form>

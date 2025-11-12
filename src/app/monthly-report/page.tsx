@@ -167,15 +167,15 @@ export default function MonthlyReportPage() {
                 Review your spending habits for any given month.
               </p>
             </div>
-            <div className="flex items-center gap-2">
-              <Button onClick={handleExport} variant="secondary">
+            <div className="flex w-full sm:w-auto items-center gap-2">
+              <Button onClick={handleExport} variant="secondary" className="w-full sm:w-auto">
                 <Download className="mr-2 h-4 w-4" />
-                Export to CSV
+                Export CSV
               </Button>
-              <Button asChild variant="outline">
+              <Button asChild variant="outline" className="w-full sm:w-auto">
                 <Link href="/">
                   <Home className="mr-2 h-4 w-4" />
-                  Back to Dashboard
+                  Dashboard
                 </Link>
               </Button>
             </div>
@@ -208,7 +208,7 @@ export default function MonthlyReportPage() {
             </div>
           ) : (
             <div className="space-y-6">
-              <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+              <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
                 <TotalExpensesCard expenses={expenses || []} />
                 <HighestExpenseCard expense={reportMetrics.highestExpense} />
                 <TopCategoryCard category={reportMetrics.topCategory} />

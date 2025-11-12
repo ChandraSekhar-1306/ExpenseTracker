@@ -61,7 +61,7 @@ export function Header() {
       
       <div className="flex items-center gap-2">
         {!isMobile && (
-          <Button asChild variant="outline" className="w-full sm:w-auto">
+          <Button asChild variant="outline">
             <Link href="/trends">
               <TrendingUp className="mr-2 h-4 w-4" />
               Trends & Insights
